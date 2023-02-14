@@ -1,190 +1,207 @@
+#include <iostream>
 #include "States.h"
 #include "StateManager.h"
-#include "Engine.h"
-#include <iostream>
+#include "CollisionManager.h"
+#include "EventManager.h"
+#include "RenderManager.h"
+#include "TextureManager.h"
 using namespace std;
 
-void State ::Render()
+void State::Render()
 {
-	SDL_RenderPresent(Engine::Instance().GetRenderer());
+	SDL_RenderPresent(REMA::Instance().GetRenderer());
 }
 
 TitleState::TitleState(){}
 
 void TitleState::Enter()
 {
-	cout << "Entering TitleState!" << endl;
-	m_Music.emplace("music", Mix_LoadMUS("../Assets/aud/Music.mp3"));
 	
-	//load music track,add it to map
-	Mix_PlayMusic(m_Music["music"],-1);
-	//and play it
 }
 
 void TitleState::Update()
 {
-	if (Engine::Instance().KeyDown(SDL_SCANCODE_N))
+	if (EVMA::KeyPressed(SDL_SCANCODE_N))
 	{
-		cout << "Changing to GameState!" << endl;
-		STMA::ChangeState(new GameState());
+		STMA::ChangeState( new GameState() );
 	}
 }
 
 void TitleState::Render()
 {
-	SDL_SetRenderDrawColor(Engine::Instance().GetRenderer(), 200, 0, 200, 255);
-	SDL_RenderClear(Engine::Instance().GetRenderer());
-	//Any unique rendering in TitleState goes here....
-
-	State::Render();//This invokes SDL_RenderPresent
+	SDL_SetRenderDrawColor(REMA::Instance().GetRenderer(), 0, 0, 255, 255);
+	SDL_RenderClear(REMA::Instance().GetRenderer());
+	State::Render();
 }
 
-void TitleState::exit()
+void TitleState::Exit()
 {
-	cout << "Exiting TitleState!" << endl;
-	Mix_FreeMusic(m_Music["music"]);
-	//make sure to invoke Mix_freemusic
+	
 }
 
-GameState::GameState(){}
+void GameState::ClearTurrets()
+{
+	for (unsigned i = 0; i < m_turrets.size(); i++)
+	{
+		delete m_turrets[i];
+		m_turrets[i] = nullptr;
+	}
+	m_turrets.clear();
+	m_turrets.shrink_to_fit();
+	// You can assimilate some parts of this code for deleting bullets and enemies.
+}
+
+GameState::GameState():m_spawnCtr(1) {}
 
 void GameState::Enter()
 {
-	cout << "Entering GameState!" << endl;
-	m_sfx.emplace("Slacker", Mix_LoadWAV("../Assets/aud/Blow.wav"));
-	m_sfx.emplace("jump", Mix_LoadWAV("../Assets/aud/Yay.ogg"));
-	//load sound effects track, add the to map(x2)
-	m_Music.emplace("music", Mix_LoadMUS("../Assets/aud/Music.mp3"));
-	//load music track,add it to map
-	Mix_PlayMusic(m_Music["music"], -1);
-	//and play it
+	TEMA::Load("../Assets/img/Turret.png", "turret");
+	TEMA::Load("../Assets/img/Enemies.png", "enemy");
+	s_enemies.push_back(new Enemy({ 80,0,40,57 }, { 512.0f, -57.0f, 40.0f, 57.0f }));
+	// Create the DOM and load the XML file.
+
+	m_xmlDoc.LoadFile("../Assets/dat/turrets.xml");
+	tinyxml2::XMLElement* pRoot = m_xmlDoc.FirstChildElement();
+
+	if (pRoot == nullptr)
+	{
+		return;
+	}
+	tinyxml2::XMLElement* pTurretElement = pRoot->FirstChildElement();
+	while (pTurretElement != nullptr)
+	{
+		if (strcmp(pTurretElement->Value(), "Turret") == 0)
+		{
+			float x = pTurretElement->FloatAttribute("xpos");
+			float y = pTurretElement->FloatAttribute("ypos");
+			int kills = pTurretElement->IntAttribute("kills");
+			auto turret = new Turret({0,0,100,100}, {x, y, 100.0f, 100.0f});
+			turret->m_kills = kills;
+			m_turrets.push_back(turret);
+		}
+		pTurretElement = pTurretElement->NextSiblingElement();
+	}
 }
 
 void GameState::Update()
 {
-	if (Engine::Instance().KeyDown(SDL_SCANCODE_P))
+	// Parse T and C events.
+	if (EVMA::KeyPressed(SDL_SCANCODE_T))
 	{
-		cout << "Changing to PauseState!" << endl;
-		//pause the music track
-		Mix_PauseMusic();
-		STMA::ChangeState(new PauseState());
+		m_turrets.push_back(new Turret({0,0,100,100},
+			{50.0f, 615.0f, 100.0f,100.0f}));
 	}
-	//parse "x" scan code and change to new endstate
-	if (Engine::Instance().KeyDown(SDL_SCANCODE_X))
+	if (EVMA::KeyPressed(SDL_SCANCODE_C))
 	{
-		cout << "Changing to EndState!" << endl;
-		
-		STMA::ChangeState(new EndState());
+		ClearTurrets();
 	}
-	//parse '1' key and play first sfx
-	if(Engine::Instance().KeyDown(SDL_SCANCODE_1))
+	// Update all GameObjects individually. Spawn enemies. Update turrets. Update enemies. Update bullets.
+	if (m_spawnCtr++ % 180 == 0)
 	{
-		Mix_PlayChannel(-1, m_sfx["Slacker"], 0);
+		s_enemies.push_back(new Enemy({ 80,0,40,57 },
+			{ (float)(rand() % (1024 - 40)), -57.0f, 40.0f, 57.0f }));
 	}
-	//parse '2' key and play second sfx
-	if (Engine::Instance().KeyDown(SDL_SCANCODE_2))
+	for (auto turret : m_turrets)
+		turret->Update();
+	for (auto enemy : s_enemies)
+		enemy->Update();
+	for (auto bullet : s_bullets)
+		bullet->Update();
+
+	// Check for collisions with bullets and enemies.
+	for (auto bullet : s_bullets)
 	{
-		Mix_PlayChannel(-1, m_sfx["jump"], 0);
+		for (auto enemy : s_enemies)
+		{
+			if (COMA::AABBCheck(*bullet->GetDst(), *enemy->GetDst())) {
+				enemy->m_deleteMe = true;
+				bullet->m_deleteMe = true;
+				bullet->m_parent->m_kills++;
+				break;
+			}
+		}
+	}
+	
+	// Cleanup bullets and enemies that go off screen.
+	for (int i = 0; i < static_cast<int>(s_bullets.size()); ++i)
+	{
+		if (s_bullets[i]->m_deleteMe)
+		{
+			s_bullets.erase(s_bullets.begin() + i);
+		}
+	}
+
+	for (int i = 0; i < static_cast<int>(s_enemies.size()); ++i)
+	{
+		if (s_enemies[i]->m_deleteMe)
+		{
+			s_enemies.erase(s_enemies.begin() + i);
+		}
 	}
 }
 
 void GameState::Render()
 {
-	SDL_SetRenderDrawColor(Engine::Instance().GetRenderer(), 0, 255, 70, 255);
-	SDL_RenderClear(Engine::Instance().GetRenderer());
-	//Any unique rendering in GameState goes here....
+	SDL_SetRenderDrawColor(REMA::Instance().GetRenderer(), 0, 0, 0, 255);
+	SDL_RenderClear(REMA::Instance().GetRenderer());
 
-	 //if the current state in the vector is the gamestate.
-	if (dynamic_cast<GameState*>(STMA::GetStates().back()))
+	for (unsigned i = 0; i < m_turrets.size(); i++)
+		m_turrets[i]->Render();
+	for (unsigned i = 0; i < s_enemies.size(); i++)
+		s_enemies[i]->Render();
+	for (unsigned i = 0; i < s_bullets.size(); i++)
+		s_bullets[i]->Render();
+
+	SDL_Rect spawnBox = { 50, 618, 100, 100 };
+	SDL_SetRenderDrawColor(REMA::Instance().GetRenderer(), 255, 255, 255, 255);
+	SDL_RenderDrawRect(REMA::Instance().GetRenderer(), &spawnBox);
+
+	// This code below prevents SDL_RenderPresent from running twice in one frame.
+	if ( dynamic_cast<GameState*>( STMA::GetStates().back() ) ) // If current state is GameState.
 		State::Render();
-	
 }
 
-void GameState::exit()
+void GameState::Exit()
 {
-	cout << "Exiting GameState!" << endl;
-	//make sure to invoke Mix_freeMusic
-	Mix_FreeChunk(m_sfx["jump"]);
-	Mix_FreeChunk(m_sfx["slacker"]);
-	Mix_FreeMusic(m_Music["music"]);
-	//make sure to invoke Mix_freeMusic. (x2)
+	// You can clear all children of the root node by calling .DeleteChildren(); and this will essentially clear the DOM.
+	m_xmlDoc.DeleteChildren();
+	tinyxml2::XMLNode* pRoot = m_xmlDoc.NewElement("Root");
+	m_xmlDoc.InsertEndChild(pRoot);
+	tinyxml2::XMLElement* pTurretElement;
+	// Iterate through all the turrets and save their positions as child elements of the root node in the DOM.
+	for (auto turret : m_turrets)
+	{
+		pTurretElement = m_xmlDoc.NewElement("Turret");
+		pTurretElement->SetAttribute("xpos", turret->GetDst()->x);
+		pTurretElement->SetAttribute("ypos", turret->GetDst()->y);
+		pTurretElement->SetAttribute("kills", turret->m_kills);
+		pRoot->InsertEndChild(pTurretElement);
+	}
+	// Make sure to save to the XML file.
+	m_xmlDoc.SaveFile("../Assets/dat/turrets.xml");
+	
+	ClearTurrets(); // Deallocate all turrets, then all other objects.
+	for (unsigned i = 0; i < s_enemies.size(); i++)
+	{
+		delete s_enemies[i];
+		s_enemies[i] = nullptr;
+	}
+	s_enemies.clear();
+	s_enemies.shrink_to_fit();
+	for (unsigned i = 0; i < s_bullets.size(); i++)
+	{
+		delete s_bullets[i];
+		s_bullets[i] = nullptr;
+	}
+	s_bullets.clear();
+	s_bullets.shrink_to_fit();
 }
 
 void GameState::Resume()
 {
-
-	cout << "Resuming GameState!" << endl;
-	// resume playing music track
-	Mix_ResumeMusic();
-}
-
-
-
-PauseState::PauseState(){}
-
-void PauseState::Enter()
-{
-	cout << "Entering PauseState!" << endl;
-}
-
-void PauseState::Update()
-{
-	if (Engine::Instance().KeyDown(SDL_SCANCODE_R))
-	{
-		cout << "Changing to GameState!" << endl;
-		STMA::ChangeState(new GameState());
-	}
-}
-
-void PauseState::Render()
-{
 	
-	SDL_SetRenderDrawColor(Engine::Instance().GetRenderer(), 50, 255, 100, 255);
-	SDL_RenderClear(Engine::Instance().GetRenderer());
-	//Any unique rendering in TitleState goes here....
-
-	
-	State::Render();
 }
 
-void PauseState::exit()
-{
-	cout << "Exiting PauseState!" << endl;
-}
-
-
-
-
-EndState::EndState(){}
-
-void EndState::Enter()
-{
-	cout << "Entering EndState!" << endl;
-}
-
-void EndState::Update()
-{
-	if (Engine::Instance().KeyDown(SDL_SCANCODE_R))
-	{
-		cout << "Changing to TitleState!" << endl;
-		STMA::ChangeState(new TitleState());
-	}
-}
-
-void EndState::Render()
-{
-	SDL_SetRenderDrawColor(Engine::Instance().GetRenderer(), 100, 255, 0, 255);
-	SDL_RenderClear(Engine::Instance().GetRenderer());
-	//Any unique rendering in TitleState goes here....
-
-	
-	State::Render();
-}
-
-void EndState::exit()
-{
-	cout << "Exiting EndState!" << endl;
-}
-
-// ina subclass to invoke the render above, we just do:
-// state :: render();
+// This is how static properties are allocated.
+std::vector<Bullet*> GameState::s_bullets;
+std::vector<Enemy*> GameState::s_enemies;

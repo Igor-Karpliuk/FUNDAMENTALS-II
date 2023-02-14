@@ -1,47 +1,43 @@
-// #pragma once
 #ifndef __ENGINE_H__
 #define __ENGINE_H__
 #include <SDL.h>
 #include <SDL_image.h>
-#include <SDL_mixer.h>
-#include <map>
 #include <chrono>
-#include <string>
-using namespace std;
 
-#define WIDTH 1024
-#define HEIGHT 768
-#define FPS 60
+// Window and Render properties. Sent to RenderManager.
+constexpr double kFPS = 60.0;
+constexpr const char* kTitle = "GAME1017 Framework";
+constexpr int kXPos = SDL_WINDOWPOS_CENTERED;
+constexpr int kYPos = SDL_WINDOWPOS_CENTERED;
+constexpr int kWidth = 1024;
+constexpr int kHeight = 768;
+constexpr Uint32 kWindowFlags = NULL;
+constexpr Uint32 kRenderFlags = NULL;
 
 class Engine
 {
 public: // Put public heading first so you ALWAYS question why things are public!
-	Engine(); // What? What is this?
+	Engine(); 
 	int Run();
-	bool KeyDown(SDL_Scancode);
-	double deltaTime;
-	SDL_Renderer* GetRenderer(); //getter for renderer
-	static Engine& Instance();// Static Instance method for singleton.
-private:
-	// For fixed timestep.
-	chrono::time_point<chrono::steady_clock> m_start, m_end;
-	chrono::duration<double> m_diff;
-	double m_fps; // Changed to double.
+	const double& GetDeltaTime() const;
+	static Engine& Instance(); // Static method for object access.
+	bool& Running(); // For EventManager.
 
+private:
+	// General engine properties.
 	const Uint8* m_pKeystates;
-	SDL_Window* m_pWindow; // Pointers are normal variables that hold addresses.
-	SDL_Renderer* m_pRenderer; // Pointer to "back buffer"
 	bool m_isRunning;
 
-	
+	// For fixed timestep.
+	std::chrono::time_point<std::chrono::steady_clock> m_start, m_end, m_lastFrameTime, m_thisFrameTime;
+	std::chrono::duration<double> m_diff, m_lastFrameDuration;
+	double m_deltaTime, m_fps;
 	
 	// Example-specific properties.
+	
 
-	chrono::time_point<chrono::steady_clock> lastFrameTime, thisFrameTime; // Cleaned this up.
-	chrono::duration<double> lastFrameDuration;
-
-
-	int Init(const char*, const int, const int, const int, const int, const int);
+	// Private methods.
+	int Init();
 	void HandleEvents();
 	void Wake();
 	void Update();

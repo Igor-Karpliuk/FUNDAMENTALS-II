@@ -1,3 +1,1 @@
-﻿C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(517,5): warning MSB8028: The intermediate directory (x64\Debug\) contains files shared from another project (GAME1007_W05_Framework.vcxproj).  This can lead to incorrect clean and rebuild behavior.
-  States.cpp
-  GAME1007_W05_Framework.vcxproj -> C:\Users\Igor\Desktop\Semester II\Fundamentals II\LE1_KarpliukIgor\Bin\LE1_SoleimayAmirmohammad.exe
+﻿  GAME1007_W05_Framework.vcxproj -> C:\Users\Igor\Desktop\Semester II\Fundamentals II\LE2_KapliukIgor\Bin\GAME1007_W05_Framework.exe
